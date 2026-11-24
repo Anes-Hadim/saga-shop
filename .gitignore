@@ -1,0 +1,9 @@
+node_modules/
+*.o
+*.out
+build/
+dist/
+.DS_Store
+data/
+*.log
+target/

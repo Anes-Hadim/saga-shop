@@ -1,0 +1,33 @@
+# Each service gets its own container and its own data, because the whole point
+# is that they do not share a database. If they shared one, a single
+# transaction would cover all three and none of this code would be necessary.
+services:
+  inventory:
+    build: { context: ., dockerfile: Dockerfile }
+    command: ["node", "-e", "require('./services/inventory').createInventory().srv.start(4001).then(p=>console.log('inventory :'+p))"]
+    ports: ["4001:4001"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  payments:
+    build: { context: ., dockerfile: Dockerfile }
+    command: ["node", "-e", "require('./services/payments').createPayments().srv.start(4002).then(p=>console.log('payments :'+p))"]
+    ports: ["4002:4002"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4002/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  orders:
+    build: { context: ., dockerfile: Dockerfile }
+    command: ["node", "-e", "require('./services/orders').createOrders({inventoryUrl:'http://inventory:4001',paymentsUrl:'http://payments:4002',log:e=>console.log(JSON.stringify(e))}).srv.start(4000).then(p=>console.log('orders :'+p))"]
+    ports: ["4000:4000"]
+    # orders runs the saga, so it must not start calling services that are not
+    # up yet — otherwise the first order fails at step one for no good reason.
+    depends_on:
+      inventory: { condition: service_healthy }
+      payments: { condition: service_healthy }
